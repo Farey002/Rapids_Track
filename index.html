@@ -226,6 +226,44 @@
             flex: 1;
         }
 
+        /* === BADGES & TAGS === */
+        .rank-badge {
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            border-radius: 12px;
+            color: #fff;
+            background: #000;
+            margin-left: 8px;
+            vertical-align: middle;
+            text-transform: uppercase;
+            border: 1px solid #000;
+            display: inline-block;
+        }
+
+        .mia-stamp {
+            color: var(--accent-danger);
+            border: 2px solid var(--accent-danger);
+            padding: 0px 4px;
+            font-weight: 900;
+            transform: rotate(-10deg);
+            display: inline-block;
+            margin-right: 6px;
+            font-size: 0.7rem;
+            letter-spacing: 1px;
+        }
+
+        .ghost-text {
+            color: #aaa !important;
+        }
+
+        /* Rank Specific Colors (Optional flair) */
+        .rank-rng { background: #9CA3AF; border-color: #9CA3AF; }
+        .rank-blunder { background: #F87171; border-color: #F87171; }
+        .rank-avg { background: #60A5FA; border-color: #60A5FA; }
+        .rank-legend { background: #34D399; border-color: #34D399; color: #000; }
+        .rank-wizard { background: #8B5CF6; border-color: #8B5CF6; }
+        .rank-engine { background: #000; border-color: #000; }
+
         /* === MOBILE TWEAKS === */
         @media (max-width: 400px) {
             .input-row { flex-direction: column; }
@@ -282,6 +320,25 @@
         
         const DEFAULT_PLAYERS = [ ];
 
+        // === HELPER FUNCTIONS ===
+        function getRankTitle(rating) {
+            if (!rating) return { title: '', class: '' };
+            if (rating < 400) return { title: 'RNG ENJOYER', class: 'rank-rng' };
+            if (rating < 800) return { title: 'BLUNDER MASTER', class: 'rank-blunder' };
+            if (rating < 1300) return { title: 'AVERAGE JOE', class: 'rank-avg' };
+            if (rating < 1500) return { title: 'CLUB LEGEND', class: 'rank-legend' };
+            if (rating < 2000) return { title: 'WIZARD', class: 'rank-wizard' };
+            return { title: 'ENGINE??', class: 'rank-engine' };
+        }
+
+        function isGhost(lastGameTimestamp) {
+            if (!lastGameTimestamp) return false;
+            // API timestamp is in seconds, JS Date is in ms
+            const diffMs = Date.now() - (lastGameTimestamp * 1000);
+            const days = diffMs / (1000 * 60 * 60 * 24);
+            return days > 7;
+        }
+
         // === STORAGE ===
         function loadPlayers() {
             try {
@@ -334,6 +391,17 @@
                 const row = document.createElement('div');
                 row.className = 'player-row';
 
+                // Logic Flags
+                const ghost = isGhost(p.lastGameDate);
+                const rankData = getRankTitle(p.rapidRating);
+                const isPeak = p.rapidRating && p.peakRating && p.rapidRating >= p.peakRating;
+
+                // Modifiers
+                const ghostClass = ghost ? 'ghost-text' : '';
+                const ghostIcon = ghost ? ' 👻' : '';
+                const miaStamp = ghost ? '<span class="mia-stamp">MIA</span>' : '';
+                const crown = isPeak ? ' 👑' : '';
+
                 // Calculate diff
                 let diffHtml = '';
                 if (p.previousRating !== null && p.rapidRating !== null) {
@@ -348,12 +416,16 @@
                 row.innerHTML = `
                     <div style="display:flex; align-items:center;">
                         <span class="rank">${index + 1}</span>
-                        <div class="p-info">
-                            <span class="p-name">${p.username}</span>
+                        <div class="p-info ${ghostClass}">
+                            <div style="display:flex; align-items:center; flex-wrap:wrap;">
+                                ${miaStamp}
+                                <span class="p-name">${p.username}${ghostIcon}</span>
+                                <span class="rank-badge ${rankData.class}">${rankData.title}</span>
+                            </div>
                         </div>
                     </div>
                     <div style="text-align:right;">
-                        <span class="p-rating">${ratingDisplay}${diffHtml}</span>
+                        <span class="p-rating ${ghostClass}">${ratingDisplay}${crown}${diffHtml}</span>
                         <div style="margin-top:4px;">
                             <button class="btn-del" onclick="removePlayer('${p.username}')">X</button>
                         </div>
@@ -485,7 +557,10 @@
             const res = await fetch(`https://api.chess.com/pub/player/${username}/stats`);
             if (!res.ok) throw new Error(res.status);
             const data = await res.json();
-            return data.chess_rapid?.last?.rating || null;
+            return {
+                rating: data.chess_rapid?.last?.rating || null,
+                date: data.chess_rapid?.last?.date || null
+            };
         }
 
         async function refreshAll() {
@@ -498,11 +573,17 @@
             for (let i = 0; i < players.length; i++) {
                 const p = players[i];
                 try {
-                    const newRating = await fetchRating(p.username);
-                    if (newRating !== null) {
+                    const result = await fetchRating(p.username);
+                    if (result.rating !== null) {
                         p.previousRating = p.rapidRating; // Shift old rating
-                        p.rapidRating = newRating;
+                        p.rapidRating = result.rating;
+                        p.lastGameDate = result.date;
                         p.lastUpdated = Date.now();
+
+                        // Peak Rating Logic
+                        if (!p.peakRating || p.rapidRating > p.peakRating) {
+                            p.peakRating = p.rapidRating;
+                        }
                     }
                 } catch (e) {
                     console.error(e);
