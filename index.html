@@ -564,14 +564,16 @@
         }
 
         // === HELPER FUNCTIONS ===
-        function drawSparkline(canvas, history) {
+        function drawSparkline(canvas, history, strokeColor) {
             const ctx = canvas.getContext('2d');
             const width = canvas.width;
             const height = canvas.height;
 
-            // Get current text color for sparkline
-            const computedStyle = getComputedStyle(document.body);
-            const strokeColor = computedStyle.getPropertyValue('--text-primary').trim();
+            // Fallback if not provided
+            if (!strokeColor) {
+                const computedStyle = getComputedStyle(document.body);
+                strokeColor = computedStyle.getPropertyValue('--text-primary').trim();
+            }
 
             ctx.clearRect(0, 0, width, height);
 
@@ -675,6 +677,10 @@
             const list = document.getElementById('playerList');
             list.innerHTML = '';
 
+            // Optimization: Get color once per update cycle
+            const computedStyle = getComputedStyle(document.body);
+            const strokeColor = computedStyle.getPropertyValue('--text-primary').trim();
+
             // Sort: High Rating -> Low Rating -> No Rating
             const sorted = [...players].sort((a, b) => {
                 if (a.rapidRating === null) return 1;
@@ -734,7 +740,7 @@
                 // Draw Sparkline
                 const canvas = row.querySelector('.sparkline-canvas');
                 if (p.history) {
-                    drawSparkline(canvas, p.history);
+                    drawSparkline(canvas, p.history, strokeColor);
                 }
             });
 
